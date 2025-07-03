@@ -1,16 +1,11 @@
 import anthropic
+import subprocess
 import os
 import yaml
 import re
 
 class LLMOptimizer:
-    def __init__(self, api_key, model="claude-opus-4-20250514", max_tokens=1000, temperature=0.7):
-        """
-        :param api_key: Your Anthropics API key (string).
-        :param model: Model name, e.g., "claude-opus-4-20250514".
-        :param max_tokens: Max tokens for the response.
-        :param temperature: Model temperature (0–2).
-        """
+    def __init__(self, api_key, model="claude-sonnet-4-20250514", max_tokens=1000, temperature=0.7):
         if not api_key:
             raise ValueError("Anthropic API key must be provided.")
         self.client = anthropic.Anthropic(api_key=api_key)
@@ -18,35 +13,59 @@ class LLMOptimizer:
         self.max_tokens = max_tokens
         self.temperature = temperature
 
-    def optimize(self, arch_yaml, problem_yaml, baseline_map):
-        """
-        Given a baseline tensor program and optimization instructions,
-        returns Claude's proposed optimized version.
-        """
+    def optimize(self, arch_yaml, problem_yaml, baseline_map, regenerate = False, error_message = None):
+
+        if regenerate:
+            system_prompt = (
+                "You are an expert in creating tensor programs. "
+                "Regenerate a valid YAML map configuration (map.yaml) that fixes the issues in the previous attempt. "
+                "Do not include any explanations, comments, or code block markers. "
+                "Only return the corrected YAML content. "
+                "Follow hardware constraints defined in arch.yaml and problem.yaml."
+            )
+
+            user_prompt = (
+                f"The previous map.yaml caused an error during simulation:\n\n{error_message}\n\n"
+                "Please regenerate a corrected map.yaml that avoids this issue.\n"
+                f"\nArchitecture specification:\n{arch_yaml}"
+                f"\nProblem description:\n{problem_yaml}"
+                f"\nPrevious (invalid) map.yaml:\n{baseline_map}"
+                "Remember, return only the YAML content without any additional text."
+            )
+        else:
+            system_prompt = (
+                "You are an expert in creating tensor programs. "
+                "You must respond with ONLY a valid YAML map configuration. "
+                "Do not include any explanations, comments, or code block markers. "
+                "Start your response immediately with the YAML content. "
+                "Ensure proper YAML formatting with correct indentation and syntax. "
+                "Follow constraints outlined in the arch.yaml and problem.yaml."
+            )
+
+            user_prompt = (
+                f"Hardware specification:\n{arch_yaml}"
+                f"\nProblem description:\n{problem_yaml}"
+                f"\nBaseline example map:\n{baseline_map}"
+                "\nPlease suggest an optimized version of the example map (new map.yaml) "
+                "that improves data locality and parallelization. "
+                "Return only the YAML content without any additional text. "
+                "Follow these constraints:"
+                "\n- For each level, tile size must be ≤ depth × block-size from arch.yaml"
+                "\n- Product of mapping factors per dimension (e.g., C) must equal the instance size in problem.yaml"
+            )
+
         message = self.client.messages.create(
             model=self.model,
             max_tokens=self.max_tokens,
             temperature=self.temperature,
-            system= "You are an expert in creating tensor programs. "
-            "You must respond with ONLY a valid YAML map configuration. "
-            "Do not include any explanations, comments, or code block markers. "
-            "Start your response immediately with the YAML content. "
-            "Ensure proper YAML formatting with correct indentation and syntax.",
+            system=system_prompt,
             messages=[
                 {
                     "role": "user",
                     "content": [
                         {
                             "type": "text",
-                            "text": (
-
-                                f"Here is the hardware specification:\n{arch_yaml}"
-                                f"\nHere is the problem description:\n{problem_yaml}"
-                                f"\nHere is a baseline example map:\n{baseline_map}"
-                                "\nPlease suggest an optimized version of the example map (new map.yaml) "
-                                "that improves data locality and parallelization. "
-                                "Return only the YAML content without any additional text."
-                            )
+                            "text": user_prompt
                         }
                     ]
                 }
