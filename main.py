@@ -91,8 +91,9 @@ def main():
 
     shutil.copy(os.path.join('./SpatialAccelerators', accelerator, 'arch.yaml'), os.path.join(out_pool_dir, 'arch.yaml'))
     shutil.copy(os.path.join('./SpatialAccelerators', accelerator, 'problem.yaml'), os.path.join(out_pool_dir, 'problem.yaml'))
+    shutil.copy('test_map.yaml', os.path.join(out_pool_dir, 'map.yaml')) # for test maps
 
-    success = run_with_rejection_sampling(
+    '''success = run_with_rejection_sampling(
             optimizer=LLMOptimizer(api_key=args.api_key),
             arch_path=os.path.join(accelerator_dir, accelerator, 'arch.yaml'),
             problem_path=os.path.join(accelerator_dir, accelerator, 'problem.yaml'),
@@ -100,6 +101,9 @@ def main():
             map_output_path='tmp_out/pool-0/map.yaml',
             max_attempts=10
         )
+    ''' # for LLM generation
+
+    success = True # for test maps
 
     if success:
 
