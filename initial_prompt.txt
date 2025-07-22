@@ -1,0 +1,295 @@
+YAML files:
+
+Hardware specification:
+architecture:
+  version: 0.2
+
+  subtree:
+  - name: System
+
+    local:
+    - name: DRAM
+      class: DRAM
+      attributes:
+        block-size: 64
+        word-bits: 8
+        read_bandwidth: 1
+        write_bandwidth: 1
+        cluster_size: 1
+
+    subtree:
+    - name: Chip
+      attributes:
+        technology: 40nm
+
+      local:
+      - name: GlobalBuffer
+        class: SRAM
+        attributes:
+          block-size: 8
+          depth: 8192
+          width: 64
+          word-bits: 8
+          num-ports: 2
+          num-banks: 256
+          read_bandwidth: 2
+          write_bandwidth: 2
+          cluster_size: 1
+
+      subtree:
+      - name: PE[0..15]
+
+        local:
+        - name: InputBuffer
+          class: regfile
+          attributes:
+            block-size: 4
+            depth: 2048
+            width: 32
+            word-bits: 8
+            num-ports: 2
+            num-banks: 1
+            read_bandwidth: 2
+            write_bandwidth: 2
+            cluster_size: 1
+
+        - name: WeightBuffer
+          class: regfile
+          attributes:
+            block-size: 4
+            depth: 8192
+            width: 32
+            word-bits: 8
+#            meshX: 16
+            num-ports: 1
+            num-banks: 8
+            read_bandwidth: 2
+            write_bandwidth: 2
+            cluster_size: 1
+
+        - name: AccumulationBuffer
+          class: regfile
+          attributes:
+            block-size: 4
+            depth: 768
+            width: 96
+            word-bits: 24
+#            meshX: 16
+            network-word-bits: 16
+            num-ports: 2
+            num-banks: 2
+            read_bandwidth: 2
+            write_bandwidth: 2
+            cluster_size: 1
+
+        - name: Registers[0..63]
+          class: regfile
+          attributes:
+            block-size: 1
+            depth: 1
+            width: 8
+            word-bits: 8
+#            meshX: 16
+            num-ports: 2
+            num-banks: 8
+            read_bandwidth: 2
+            write_bandwidth: 2
+            cluster_size: 1
+
+        - name: MACC[0..63]
+          class: intmac
+          attributes:
+            word-bits: 8
+#            meshX: 16
+            cluster_size: 1
+
+Problem description:
+problem:
+  instance:
+    C: 1024
+    H: 1
+    Hdilation: 1
+    Hstride: 1
+    K: 512
+    N: 16
+    P: 14
+    Q: 14
+    R: 1
+    S: 1
+    Wdilation: 1
+    Wstride: 1
+    type: C2D
+  shape:
+    coefficients:
+    - default: 1
+      name: Wstride
+    - default: 1
+      name: Hstride
+    - default: 1
+      name: Wdilation
+    - default: 1
+      name: Hdilation
+    data-spaces:
+    - name: Weights
+      projection:
+      - - - H
+      - - - C
+      - - - K
+      - - - R
+      - - - S
+    - name: Inputs
+      projection:
+      - - - N
+      - - - H
+      - - - C
+      - - - R
+          - Wdilation
+        - - P
+          - Wstride
+      - - - S
+          - Hdilation
+        - - Q
+          - Hstride
+    - name: Outputs
+      projection:
+      - - - N
+      - - - H
+      - - - K
+      - - - Q
+      - - - P
+      read-write: true
+    dimensions:
+    - H
+    - C
+    - K
+    - R
+    - S
+    - N
+    - P
+    - Q
+    name: CNN-Layer
+
+
+Here is a YAML tensor mapping program specific to the above hardware and problem:
+mapping:
+- factors: R=1 S=1 P=1 Q=14 C=1 K=1 H=1 N=8
+  permutation: RQHKPSNC
+  target: Registers
+  type: temporal
+- bypass:
+  - Inputs
+  - Outputs
+  keep:
+  - Weights
+  target: Registers
+  type: datatype
+- factors: R=1 S=1 P=7 Q=1 C=1 K=1 H=1 N=1
+  permutation: KPRQCHNS
+  target: AccumulationBuffer
+  type: temporal
+- factors: R=1 S=1 P=2 Q=1 C=2 K=1 H=1 N=1
+  permutation: KPRQCHNS
+  target: AccumulationBuffer
+  type: spatial
+- bypass:
+  - Weights
+  - Inputs
+  keep:
+  - Outputs
+  target: AccumulationBuffer
+  type: datatype
+- factors: R=1 S=1 P=1 Q=1 C=1 K=16 H=1 N=1
+  permutation: SNHQPRCK
+  target: WeightBuffer
+  type: temporal
+- bypass:
+  - Inputs
+  - Outputs
+  keep:
+  - Weights
+  target: WeightBuffer
+  type: datatype
+- factors: R=1 S=1 P=1 Q=1 C=1 K=1 H=1 N=2
+  permutation: SNKRCQPH
+  target: InputBuffer
+  type: temporal
+- bypass:
+  - Weights
+  - Outputs
+  keep:
+  - Inputs
+  target: InputBuffer
+  type: datatype
+- factors: R=1 S=1 P=1 Q=1 C=1 K=1 H=1 N=1
+  permutation: QKSRHNCP
+  target: GlobalBuffer
+  type: temporal
+- factors: R=1 S=1 P=1 Q=1 C=2 K=1 H=1 N=1
+  permutation: QKSRHNCP
+  target: GlobalBuffer
+  type: spatial
+- bypass:
+  - Weights
+  keep:
+  - Inputs
+  - Outputs
+  target: GlobalBuffer
+  type: datatype
+- factors: R=1 S=1 P=1 Q=1 C=256 K=32 H=1 N=1
+  permutation: PRNHQSCK
+  target: DRAM
+  type: temporal
+- keep:
+  - Inputs
+  - Outputs
+  - Weights
+  target: DRAM
+  type: datatype
+
+Current evaluation score to minimize (calculated as edp + latency + energy):
+8358214248055.46
+
+Task:
+Generate an improved map.yaml to minimize latency, energy, and/or edp while adhering to hardware constraints defined in arch.yaml and problem.yaml.
+
+Instructions:
+- Return only the YAML content of the optimized map.yaml (no prose or explanations).
+- Your mapping must strictly satisfy all hardware and problem constraints, verified using the following rules:
+
+Verification checklist (with calculation examples using the baseline map attached):
+
+1. Mapping Format:
+- Includes all required mapping levels and types (temporal, spatial, datatype), as shown in the baseline map.
+
+2. Buffer Tile Size Constraints (based on arch.yaml):
+- Let *_eff denote the product of all mapping factors for a dimension up to a given level.
+
+  Registers (weight tile):
+    Tile size = K_eff * R_eff * S_eff * C_eff * H_eff (e.g., 1*1*1*1*1 = 1)
+
+  Accumulation Buffer (output tile size):
+    Tile size = P_eff * Q_eff * K_eff * N_eff * H_eff (e.g., 14*14*1*8*1 = 1568)
+
+  Weight Buffer (weight tile size):
+    Tile size = K_eff * R_eff * S_eff * C_eff * H_eff (e.g., 16*1*1*2*1 = 32)
+
+  Input Buffer (input tile size):
+    Tile size = N_eff * ((P_eff-1)*wstride + 1 + wdilation*(R_eff-1)) * ((Q_eff-1)*hstride + 1 + hdilation*(S_eff-1)) * C_eff * H_eff (e.g., 16 * 13 * 13 * 2 * 1 = 6272)
+
+  Global Buffer (input + output tile sizes):
+    Input tile = N_eff * ((P_eff-1)*wstride + 1 + wdilation*(R_eff-1)) * ((Q_eff-1)*hstride + 1 + hdilation*(S_eff-1)) * C_eff * H_eff (e.g., 16 * ((14 - 1) * 1 + 1 + 1 * (1 - 1)) * ((14 - 1) * 1 + 1 + 1 * (1 - 1)) * 4 * 1 = 12544)
+    Output tile = P_eff * Q_eff * K_eff * N_eff * H_eff (e.g., 14 * 14 * 16 * 1 = 3584)
+    Total = input + output = 12544 + 3584 = 9856
+
+- Ensure all tile sizes are <= depth * block-size from arch.yaml at each level.
+
+3. Problem Coverage (based on problem.yaml):
+- The product of mapping factors per dimension (across all levels) must match the instance size. For example:
+    R_eff = 1*1*1*1*1*1*1*1 = 1 == Instance size = 1
+    P_eff = 1*7*2*1*1*1*1*1 = 14 == Instance size = 14
+    C_eff = 1*1*2*1*1*1*2*256 = 1024 == Instance size = 1024
+(Continue verifying: S, Q, K, H, N...)
+
+Important:
+- Do not return until all constraints are mathematically verified in your solution.
+- Return only the final optimized map.yaml content with no other text, starting with 'mapping:'.

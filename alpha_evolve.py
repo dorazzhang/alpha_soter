@@ -13,7 +13,7 @@ class LLMOptimizer:
         self.max_tokens = max_tokens
         self.temperature = temperature
 
-    def optimize(self, arch_yaml, problem_yaml, baseline_map, regenerate = False, error_message = None):
+    def optimize(self, arch_yaml, problem_yaml, parent_map, score, regenerate = False, iterate = False, inspirations = None, error_message = None, prompt = None):
 
         if regenerate:
             system_prompt = (
@@ -33,16 +33,42 @@ class LLMOptimizer:
                 "1. Mapping Format: add the missing section (e.g., the spatial type for Accumulation Buffer) to the mapping and update factors accordingly\n"
                 "2. Mapped tile size exceeds buffer capacity. Decrease factors at or before the level that contribute to the tile size. (e.g., If the Accumlation Buffer's tile size is the problem, try decreasing dimension P at that level.)\n"
                 "3. product of all factors of a dimension is not equal to the dimension size of the workload. Increase or decrease factors of that dimension at different levels until they all multiply to the instance size\n\n"
+                "Previous map.yaml with error:\n"
+                f"{parent_map}\n\n" 
+                "Previous Prompt:\n"
+                f"{prompt}"
+            )
+
+        if iterate:
+            inspiration_block = ""
+            if inspirations:
+                inspiration_block = "\n\n".join(
+                    f"# Inspiration (score: {p['score']})\n{p['yaml_code']}"
+                    for p in inspirations
+                )
+
+            system_prompt = (
+                "You are an expert in creating tensor programs. "
+                "Do not include any explanations, comments, or code block markers. "
+                "Only return the corrected YAML file starting with \'mapping:\'. "
+            )
+
+            user_prompt = (
+                # should have new parent map and inspiration maps (2), so only possible after 3 loops/map generations
                 "YAML files:\n\n"
                 f"Hardware specification:\n{arch_yaml}\n\n"
                 f"Problem description:\n{problem_yaml}\n\n"
-                f"Baseline example map:\n{baseline_map}\n\n"
+                "Here is a YAML tensor mapping program specific to the above hardware and problem:\n"
+                f"{parent_map}\n\n"
+                f"Current evaluation score to minimize (calculated as edp + latency + energy):\n{score}\n\n"
+                "Here are some other alternative mappings for inspiration:\n"
+                f"{inspiration_block}\n\n"
 
-                "Previous Task:\n"
-                "Generate an optimized map.yaml that improves data locality and parallelism "
+                "Task:\n"
+                "Improve the original to minimize latency, energy, and/or edp"
                 "while adhering to hardware constraints defined in arch.yaml and problem.yaml.\n\n"
 
-                "Previous Instructions:\n"
+                "Instructions:\n"
                 "- Return only the YAML content of the optimized map.yaml (no prose or explanations).\n"
                 "- Your mapping must strictly satisfy all hardware and problem constraints, verified using the following rules:\n\n"
 
@@ -88,7 +114,9 @@ class LLMOptimizer:
                 "Important:\n"
                 "- Do not return until all constraints are mathematically verified in your solution.\n"
                 "- Return only the final optimized map.yaml content with no other text, starting with \'mapping:\'.\n"
+
             )
+
 
         else:
             system_prompt = (
@@ -101,10 +129,12 @@ class LLMOptimizer:
                 "YAML files:\n\n"
                 f"Hardware specification:\n{arch_yaml}\n\n"
                 f"Problem description:\n{problem_yaml}\n\n"
-                f"Baseline example map:\n{baseline_map}\n\n"
+                "Here is a YAML tensor mapping program specific to the above hardware and problem:\n"
+                f"{parent_map}\n\n"
+                f"Current evaluation score to minimize (calculated as edp + latency + energy):\n{score}\n\n"
 
                 "Task:\n"
-                "Generate an optimized map.yaml that improves data locality and parallelism "
+                "Generate an improved map.yaml to minimize latency, energy, and/or edp"
                 "while adhering to hardware constraints defined in arch.yaml and problem.yaml.\n\n"
 
                 "Instructions:\n"
@@ -177,7 +207,7 @@ class LLMOptimizer:
 
         try:
             yaml.safe_load(message.content[0].text)
-            return message.content[0].text
+            return message.content[0].text, user_prompt
         except yaml.YAMLError:
             print(f"Invalid YAML generated. Error: \n{message.content[0].text}")
-            return None
+            return None, user_prompt

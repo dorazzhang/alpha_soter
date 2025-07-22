@@ -8,6 +8,7 @@ import subprocess
 
 from alpha_evolve import LLMOptimizer
 from cost_model import Timeloop
+from database import Program
 
 
 def main():
@@ -91,37 +92,84 @@ def main():
 
     shutil.copy(os.path.join('./SpatialAccelerators', accelerator, 'arch.yaml'), os.path.join(out_pool_dir, 'arch.yaml'))
     shutil.copy(os.path.join('./SpatialAccelerators', accelerator, 'problem.yaml'), os.path.join(out_pool_dir, 'problem.yaml'))
-    shutil.copy('test_map.yaml', os.path.join(out_pool_dir, 'map.yaml')) # for test maps
+    # shutil.copy('test_map.yaml', os.path.join(out_pool_dir, 'map.yaml')) # for test maps
 
-    '''success = run_with_rejection_sampling(
-            optimizer=LLMOptimizer(api_key=args.api_key),
-            arch_path=os.path.join(accelerator_dir, accelerator, 'arch.yaml'),
-            problem_path=os.path.join(accelerator_dir, accelerator, 'problem.yaml'),
-            initial_baseline_path=args.baseline_map_file,
-            map_output_path='tmp_out/pool-0/map.yaml',
-            max_attempts=10
-        )
-    ''' # for LLM generation
+    with open(args.parent_map_file, 'r') as f:
+        parent_map = f.read()
+    
+    program = Program()
+    inspirations = None
+    score = 8358214248055.46 # score of initial map
+    os.makedirs("program_outputs", exist_ok=True)
 
-    success = True # for test maps
+    for i in range(4): # change based on number of loops wanted
 
-    if success:
 
-        cost_model = Timeloop(in_config_path='./SpatialAccelerators', out_config_path='./tmp_out',
-            accelerator=accelerator)
+        iterate = True if i > 1 else False
 
-        stats = cost_model.run_config(out_pool_dir)
-        stats['edp'] = stats['energy'] * stats['cycles']
+        success, map_yaml, prompt_used = run_with_rejection_sampling(
+                optimizer=LLMOptimizer(api_key=args.api_key),
+                arch_path=os.path.join(accelerator_dir, accelerator, 'arch.yaml'),
+                problem_path=os.path.join(accelerator_dir, accelerator, 'problem.yaml'),
+                parent_map=parent_map,
+                iterate=iterate,
+                inspirations=inspirations,
+                score=score,
+                map_output_path='tmp_out/pool-0/map.yaml',
+                max_attempts=10
+            )
+        # for LLM generation
 
-        print("Performance stats:")
-        print(stats)
+        # success = True # for test maps
+
+        if success:
+
+            cost_model = Timeloop(in_config_path='./SpatialAccelerators', out_config_path='./tmp_out',
+                accelerator=accelerator)
+
+            stats = cost_model.run_config(out_pool_dir)
+            stats['edp'] = stats['energy'] * stats['cycles']
+
+            score_sum = stats['edp'] + stats['energy'] + stats['cycles'] #score of recently generated map
+            print("Performance stats:")
+            print(stats)
+
+            parent_id = program.get_best()["id"]
+            
+            program.add(yaml_code = map_yaml, score = score_sum, prompt = prompt_used, parent_id = parent_id)
+
+            # Save each program to a YAML file
+            program_path = os.path.join("program_outputs", f"program_{program.id_counter}.yaml")
+
+            program_data = {
+                "id": program.id_counter,
+                "score": score_sum,
+                "parent_id": parent_id,
+                "prompt": prompt_used,
+                "yaml_code": yaml.safe_load(map_yaml)
+            }
+
+            with open(program_path, "w") as f:
+                yaml.dump(program_data, f)
+            
+            best_program = program.get_best()
+            score = best_program["score"] # score of parent_map
+            parent_map = best_program["yaml_code"]
+            inspirations = program.get_inspirations(exclude_id=best_program["id"])
+        
+        else:
+            print(f"did not successfully generate on {i}th iteration")
+
+
 
 
 def run_with_rejection_sampling(
     optimizer,
     arch_path,
     problem_path,
-    initial_baseline_path,
+    parent_map,
+    inspirations,
+    score,
     map_output_path,
     max_attempts=10
 ):
@@ -130,22 +178,30 @@ def run_with_rejection_sampling(
         arch_yaml = f.read()
     with open(problem_path, 'r') as f:
         problem_yaml = f.read()
-    with open(initial_baseline_path, 'r') as f:
-        baseline_map = f.read()
 
     regenerate = False
     error_message = None
+    prompt_used = None
 
     for attempt in range(max_attempts):
         print(f"\n Attempt #{attempt+1}")
 
+        if inspirations:
+            print("Inspirations being used:")
+            for p in inspirations:
+                print(f"  - ID {p['id']}, Score: {p['score']}")
+
+
         # Generate new map.yaml from LLM
-        map_yaml = optimizer.optimize(
+        map_yaml, prompt_used = optimizer.optimize(
             arch_yaml=arch_yaml,
             problem_yaml=problem_yaml,
-            baseline_map=baseline_map,
+            parent_map=parent_map,
+            score = score,
             regenerate=regenerate,
-            error_message=error_message
+            inspirations=inspirations,
+            error_message=error_message,
+            prompt = prompt_used
         )
 
         # Save new map.yaml (overwrite previous)
@@ -162,7 +218,7 @@ def run_with_rejection_sampling(
                 text=True
             )
             print("timeloop-model ran successfully!")
-            return True
+            return True, map_yaml, prompt_used
         except (yaml.YAMLError, subprocess.CalledProcessError) as e:
             if isinstance(e, yaml.YAMLError):
                 print("Invalid YAML generated.")
@@ -174,10 +230,10 @@ def run_with_rejection_sampling(
 
             regenerate = True
             with open(map_output_path, 'r') as f:
-                baseline_map = f.read()  # use failed output as new baseline
+                parent_map = f.read()  # use failed output as new parent map
 
     print(f"Failed to generate a valid map.yaml after max {max_attempts} attempts.")
-    return False
+    return False, None, None
 
 
 
@@ -190,5 +246,5 @@ if __name__ == '__main__':
     parser.add_argument('--workload', required=True, type=str)
     parser.add_argument('--layer_id', required=True, type=int)
     parser.add_argument('--batch_size', required=True, type=int)
-    parser.add_argument('--baseline_map_file', required=True, help='Path to a baseline map.yaml')
+    parser.add_argument('--parent_map_file', required=True, help='Path to a parent map.yaml')
     main()
