@@ -3,7 +3,7 @@ class Program:
         self.id_counter = 0
         with open('example_map.yaml', 'r') as fd:
             yaml_code = fd.read()
-        with open('intial_prompt.txt', 'r') as fd:
+        with open('initial_prompt.txt', 'r') as fd:
             prompt = fd.read()
         score = 411041792 + 20333.22 + 8357803185930.24
         self.programs = [{

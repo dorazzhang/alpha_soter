@@ -100,12 +100,13 @@ def main():
     program = Program()
     inspirations = None
     score = 8358214248055.46 # score of initial map
+    success_count = 0
     os.makedirs("program_outputs", exist_ok=True)
 
     for i in range(4): # change based on number of loops wanted
 
 
-        iterate = True if i > 1 else False
+        iterate = True if success_count > 1 else False
 
         success, map_yaml, prompt_used = run_with_rejection_sampling(
                 optimizer=LLMOptimizer(api_key=args.api_key),
@@ -124,6 +125,7 @@ def main():
 
         if success:
 
+            success_count += 1
             cost_model = Timeloop(in_config_path='./SpatialAccelerators', out_config_path='./tmp_out',
                 accelerator=accelerator)
 
@@ -155,7 +157,7 @@ def main():
             best_program = program.get_best()
             score = best_program["score"] # score of parent_map
             parent_map = best_program["yaml_code"]
-            inspirations = program.get_inspirations(exclude_id=best_program["id"])
+            inspirations = program.get_inspirations(exclude_id=best_program["id"]) if i > 1 else None
         
         else:
             print(f"did not successfully generate on {i}th iteration")
@@ -168,6 +170,7 @@ def run_with_rejection_sampling(
     arch_path,
     problem_path,
     parent_map,
+    iterate,
     inspirations,
     score,
     map_output_path,
@@ -199,6 +202,7 @@ def run_with_rejection_sampling(
             parent_map=parent_map,
             score = score,
             regenerate=regenerate,
+            iterate=iterate,
             inspirations=inspirations,
             error_message=error_message,
             prompt = prompt_used
