@@ -246,11 +246,11 @@ mapping:
   target: DRAM
   type: datatype
 
-Current evaluation score to minimize (calculated as edp + latency + energy):
-8358214248055.46
+Current evaluation score to minimize (calculated as edp):
+8357803185930.24
 
 Task:
-Generate an improved map.yaml to minimize latency, energy, and/or edp while adhering to hardware constraints defined in arch.yaml and problem.yaml.
+Generate an improved map.yaml to minimize edp while adhering to hardware constraints defined in arch.yaml and problem.yaml.
 
 Instructions:
 - Return only the YAML content of the optimized map.yaml (no prose or explanations).
@@ -278,15 +278,15 @@ Verification checklist (with calculation examples using the baseline map attache
 
   Global Buffer (input + output tile sizes):
     Input tile = N_eff * ((P_eff-1)*wstride + 1 + wdilation*(R_eff-1)) * ((Q_eff-1)*hstride + 1 + hdilation*(S_eff-1)) * C_eff * H_eff (e.g., 16 * ((14 - 1) * 1 + 1 + 1 * (1 - 1)) * ((14 - 1) * 1 + 1 + 1 * (1 - 1)) * 4 * 1 = 12544)
-    Output tile = P_eff * Q_eff * K_eff * N_eff * H_eff (e.g., 14 * 14 * 16 * 1 = 3584)
-    Total = input + output = 12544 + 3584 = 9856
+    Output tile = P_eff * Q_eff * K_eff * N_eff * H_eff (e.g., 14 * 14 * 16 * 16 * 1 = 50176)
+    Total = input + output = 12544 + 50176 = 62720
 
 - Ensure all tile sizes are <= depth * block-size from arch.yaml at each level.
 
 3. Problem Coverage (based on problem.yaml):
 - The product of mapping factors per dimension (across all levels) must match the instance size. For example:
     R_eff = 1*1*1*1*1*1*1*1 = 1 == Instance size = 1
-    P_eff = 1*7*2*1*1*1*1*1 = 14 == Instance size = 14
+    P_eff = 1*14*1*1*1*1*1*1 = 14 == Instance size = 14
     C_eff = 1*1*2*1*1*1*2*256 = 1024 == Instance size = 1024
 (Continue verifying: S, Q, K, H, N...)
 

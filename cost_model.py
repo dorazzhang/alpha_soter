@@ -50,7 +50,7 @@ class Timeloop(object):
         # self.dim_note = ['R', 'S', 'P', 'Q', 'C', 'K', 'H', 'N']
         # self.dim2note = {0: 'R', 1: 'S', 2: 'P', 3: 'Q', 4: 'C', 5: 'K', 6: 'N', 7: 'H'}
         self.dim2note = {0: 'R', 1: 'S', 2: 'P', 3: 'Q', 4: 'C', 5: 'K', 6: 'H', 7: 'N'}
-        print(self.dim2note.values())
+        # print(self.dim2note.values())
         self.dimension, self.dimension_dict = self.get_problem_info()
         self.dimension_prime = {key: self.get_prime_factors(self.dimension_dict[key]) for key in self.dim2note.values()}
 
@@ -355,7 +355,7 @@ class Timeloop(object):
                 instances *= (int(macc.split('..')[1].split(']')[0]) + 1)
             num_instances.append(instances)
 
-        print(buffer_name_list, num_instances, buffer_size_list)
+        # print(buffer_name_list, num_instances, buffer_size_list)
 
         sp_cstr = []
         for i in range(len(num_instances) - 1):
@@ -365,7 +365,7 @@ class Timeloop(object):
                 raise ValueError('Invalid Architecture File. '
                                  'Buffer hierarchy not perfectly divisible.')
 
-        print(sp_cstr)
+        # print(sp_cstr)
 
         return {f'l{level}': name for level, name in zip(np.arange(num_buffer_levels, 0, -1), buffer_name_list)}, \
                {f'l{level}': name for level, name in zip(np.arange(num_buffer_levels, 0, -1), buffer_size_list)}, \
@@ -512,14 +512,14 @@ class Timeloop(object):
         stdout, stderr = process.communicate()
         process.wait()
         if stderr:
-            print("stderrstderr: ", stderr, program)
+            # print("stderrstderr: ", stderr, program)
             return [-float('Inf')] * len(self.opt_obj)
         else:
             try:
                 stats = self.run_config(self.pool_path[pool_idx])
                 fitness = self.judge(stats, self.opt_obj)
             except Exception as e:
-                print("Exception: ", e)
+                # print("Exception: ", e)
                 fitness = [-float('Inf')] * len(self.opt_obj)
             return fitness
 
@@ -543,7 +543,7 @@ class Timeloop(object):
                         fitness[i] = fit
                     break
                 except Exception as e:
-                    print(type(e).__name__, e)
+                    # print(type(e).__name__, e)
                     pool.shutdown(wait=False)
                     pool = ProcessPoolExecutor(num_samples)
 

@@ -258,7 +258,7 @@ class Tuner:
     def run(self, epochs):
         self.explorer.train()
         for ep in range(epochs):
-            print('Epoch {}'.format(ep))
+            # print('Epoch {}'.format(ep))
 
             final_program_seq, total_rewards, total_log_probs, total_log_prob_masks = self.exploration()
 
@@ -275,8 +275,8 @@ class Tuner:
                 self.best_energy = energy[best_idx]
                 self.best_program = final_program_seq[best_idx]
                 self.create_timeloop_report(self.best_program, self.report_dir)
-            print("Achieved obj: ", self.best_obj, obj_values[best_idx], self.best_latency,
-                  self.best_energy, (obj_values > float('-inf')).sum())
+            # print("Achieved obj: ", self.best_obj, obj_values[best_idx], self.best_latency,
+            #       self.best_energy, (obj_values > float('-inf')).sum())
         self.clean_timeloop_output_files()
         return chkpt
 
