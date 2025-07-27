@@ -119,6 +119,8 @@ def main():
     print("Evaluating initial parent map...")
     # Evaluate initial parent map
     cost_model = Timeloop(in_config_path='./SpatialAccelerators', out_config_path='./tmp_out', accelerator=accelerator)
+    command = ['timeloop-model', 'arch.yaml', 'problem.yaml', 'map.yaml'] 
+    subprocess.run(command, cwd=out_pool_dir, check=True)
     initial_stats = cost_model.run_config(out_pool_dir)
     initial_stats['edp'] = initial_stats['energy'] * initial_stats['cycles']
     
@@ -164,7 +166,7 @@ def main():
 
         if success:
             success_count += 1
-            print(f"✓ Successfully generated valid mapping")
+            print(f"Successfully generated valid mapping")
             
             print("Evaluating generated mapping...")
             cost_model = Timeloop(in_config_path='./SpatialAccelerators', out_config_path='./tmp_out',
@@ -227,7 +229,6 @@ def main():
     
     print(f"Results:")
     print(f"  Total programs generated: {total_programs}")
-    print(f"  Successful generations: {success_count}/4")
     print(f"  Best program: ID {best_program['id']}")
     print(f"  Best EDP: {best_program['score']:.2e}")
     print(f"  Best cycles: {best_program['cycles']:,}")
@@ -272,10 +273,7 @@ def run_with_rejection_sampling(
     print(f"  Starting generation with rejection sampling (max {max_attempts} attempts)...")
 
     for attempt in range(max_attempts):
-        if attempt == 0:
-            print(f"    Attempt {attempt+1}/{max_attempts}: Initial generation")
-        else:
-            print(f"    Attempt {attempt+1}/{max_attempts}: Regeneration (error: {error_message[:50]}...)")
+        print(f"    Attempt {attempt+1}/{max_attempts}:")
 
         if inspirations and attempt == 0:
             print(f"    Using {len(inspirations)} inspiration programs:")
@@ -323,21 +321,21 @@ def run_with_rejection_sampling(
                 capture_output=True,
                 text=True
             )
-            print(f"    ✓ Attempt {attempt+1} successful!")
+            print(f"    Attempt {attempt+1} successful!")
             return True, map_yaml, prompt_used
         except (yaml.YAMLError, subprocess.CalledProcessError) as e:
             if isinstance(e, yaml.YAMLError):
-                print(f"    ✗ Invalid YAML format")
+                print(f"    Invalid YAML format")
                 error_message = "Invalid YAML format. Please make sure there is no additional text and the proper syntax is followed"
             else:
-                print(f"    ✗ Timeloop validation failed")
                 error_message = e.stderr
+                print(f"    Timeloop validation failed: {error_message}")
 
             regenerate = True
             with open(map_output_path, 'r') as f:
                 parent_map = f.read()  # use failed output as new parent map
 
-    print(f"    ✗ Failed to generate valid mapping after {max_attempts} attempts")
+    print(f"    Failed to generate valid mapping after {max_attempts} attempts")
     return False, None, None
 
 
